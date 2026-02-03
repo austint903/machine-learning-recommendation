@@ -1,0 +1,26 @@
+[project]
+name = "machine-learning-music-recommendation"
+version = "0.1.0"
+description = "Hybrid music recommendation system using collaborative and content-based filtering"
+requires-python = ">=3.11"
+
+dependencies = [
+    "pandas>=2.1.0",
+    "numpy>=1.24.0",
+
+    "scikit-learn>=1.3.0",
+    "scipy>=1.11.0",
+    "scikit-surprise>=1.1.3",
+
+    "spotipy>=2.23.0",
+    "python-dotenv>=1.0.0",
+
+    "gradio>=4.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
