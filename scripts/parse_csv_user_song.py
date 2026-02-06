@@ -1,16 +1,15 @@
 import pandas as pd
-import os
 from pathlib import Path
 
 
-def parse_raw_data():
+def parse_raw_data_user_song():
     # Define paths
     project_root = Path(__file__).parent.parent
     raw_data_path = project_root / 'data' / 'raw' / 'Last.fm_data.csv'
     processed_data_path = project_root / 'data' / 'processed' / 'user_song_interaction.csv'
 
     # Load raw data
-    print(f"Loading raw data from {raw_data_path}...")
+    print(f"Loading raw data from {raw_data_path}")
     df = pd.read_csv(raw_data_path)
 
     # Display initial data info
@@ -45,4 +44,6 @@ def parse_raw_data():
 
 
 if __name__ == "__main__":
-    parse_raw_data()
+    parse_raw_data_user_song()
+
+
