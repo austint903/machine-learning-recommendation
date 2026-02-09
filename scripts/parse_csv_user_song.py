@@ -26,9 +26,6 @@ def parse_raw_data_user_song():
     # Sort by user and play count (descending)
     aggregated_df = aggregated_df.sort_values(['user', 'play_count'], ascending=[True, False])
 
-    # Create processed directory if it doesn't exist
-    processed_data_path.parent.mkdir(parents=True, exist_ok=True)
-
     # Save to CSV
     print(f"\nSaving aggregated data to {processed_data_path}...")
     aggregated_df.to_csv(processed_data_path, index=False)
