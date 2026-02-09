@@ -12,6 +12,7 @@ AUDIO_FEATURE_COLS = [
     "mode", "key", "duration_ms", "time_signature",
 ]
 
+#ensure we don't go over spotify limits
 BATCH_SIZE = 50
 SEARCH_DELAY = 0.05
 CHECKPOINT_INTERVAL = 500
@@ -72,7 +73,6 @@ def search_spotify_ids(sp, songs_df, checkpoint_path):
 
         results.append({"track_id": track_id, "spotify_id": spotify_id})
 
-        # Periodic checkpoint
         if (i + 1) % CHECKPOINT_INTERVAL == 0:
             pd.DataFrame(results).to_csv(checkpoint_path, index=False)
             found = sum(1 for r in results if r["spotify_id"] is not None)
@@ -80,7 +80,6 @@ def search_spotify_ids(sp, songs_df, checkpoint_path):
 
         time.sleep(SEARCH_DELAY)
 
-    # Final save
     search_df = pd.DataFrame(results)
     search_df.to_csv(checkpoint_path, index=False)
     return search_df
