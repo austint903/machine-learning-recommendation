@@ -138,3 +138,52 @@ def fetch_audio_features_batch(sp, search_df):
     return pd.DataFrame(all_features)
 
 
+def main():
+    project_root = Path(__file__).parent.parent
+    load_dotenv(project_root / ".env")
+
+    songs_path = project_root / "data" / "processed" / "unique_song_interaction.csv"
+    checkpoint_path = project_root / "data" / "processed" / "_spotify_search_checkpoint.csv"
+    output_path = project_root / "data" / "processed" / "audio_features.csv"
+
+    # Initialize Spotify client
+    sp = spotipy.Spotify(
+        auth_manager=SpotifyClientCredentials(),
+        requests_timeout=10,
+        retries=3,
+    )
+
+    songs_df = pd.read_csv(songs_path)
+    print(f"Loaded {len(songs_df)} unique songs")
+
+    # Phase 1: Search
+    print("\n" + "=" * 60)
+    print("  PHASE 1: Searching Spotify for track IDs")
+    print("=" * 60)
+    search_df = search_spotify_ids(sp, songs_df, checkpoint_path)
+
+    found_count = search_df["spotify_id"].notna().sum()
+    miss_count = search_df["spotify_id"].isna().sum()
+    print(f"\n  Search complete: {found_count} found, {miss_count} not found")
+    print(f"  Hit rate: {found_count / len(search_df) * 100:.1f}%")
+
+    # Phase 2: Batch fetch audio features
+    print("\n" + "=" * 60)
+    print("  PHASE 2: Fetching audio features in batches")
+    print("=" * 60)
+    features_df = fetch_audio_features_batch(sp, search_df)
+
+    # Phase 3: Save
+    print("\n" + "=" * 60)
+    print("  PHASE 3: Saving audio features")
+    print("=" * 60)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    features_df.to_csv(output_path, index=False)
+    print(f"  Saved {len(features_df)} songs with audio features to {output_path}")
+    print(f"\n  Coverage: {len(features_df)} / {len(songs_df)} songs "
+          f"({len(features_df) / len(songs_df) * 100:.1f}%)")
+    print(f"  Features per song: {len(AUDIO_FEATURE_COLS)}")
+
+
+if __name__ == "__main__":
+    main()
