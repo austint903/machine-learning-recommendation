@@ -189,3 +189,108 @@ class SVD:
 
         return history
 
+#evaluation metrics/error metrics
+def compute_mse(model: SVD, data: pd.DataFrame) -> float:
+    """
+    Compute Mean Squared Error of the model on a given dataset.
+
+    Reusable on any split (train, validation, or test).
+    """
+    users = data["user_id"].values
+    items = data["song_id"].values
+    actuals = data["play_count"].values.astype(np.float64)
+
+    preds = model.predict(users, items)
+    mse = np.mean((actuals - preds) ** 2)
+    return float(mse)
+
+
+def compute_rmse(model: SVD, data: pd.DataFrame) -> float:
+    """Compute Root Mean Squared Error."""
+    return float(np.sqrt(compute_mse(model, data)))
+
+
+def evaluate_model(model: SVD, data: pd.DataFrame, label: str = "Test") -> dict:
+    """
+    Full evaluation report on a dataset split.
+
+    Returns dict with MSE, RMSE, and MAE.
+    """
+    users = data["user_id"].values
+    items = data["song_id"].values
+    actuals = data["play_count"].values.astype(np.float64)
+
+    preds = model.predict(users, items)
+    errors = actuals - preds
+
+    metrics = {
+        "mse": float(np.mean(errors ** 2)),
+        "rmse": float(np.sqrt(np.mean(errors ** 2))),
+        "mae": float(np.mean(np.abs(errors))),
+    }
+
+    print(f"\n{'='*50}")
+    print(f"  {label} Set Evaluation")
+    print(f"{'='*50}")
+    print(f"  Samples:  {len(data)}")
+    print(f"  MSE:      {metrics['mse']:.6f}")
+    print(f"  RMSE:     {metrics['rmse']:.6f}")
+    print(f"  MAE:      {metrics['mae']:.6f}")
+    print(f"{'='*50}")
+
+    return metrics
+
+
+def main():
+    project_root = Path(__file__).parent.parent
+    data_path = project_root / "data" / "processed" / "user_song_interaction.csv"
+
+    # --- Step 1: Load & prepare ---
+    print("=" * 60)
+    print("  STEP 1: Loading and preparing data")
+    print("=" * 60)
+    df, user_to_id, song_to_id = load_and_prepare_data(str(data_path))
+
+    # --- Step 2: Split ---
+    print("\n" + "=" * 60)
+    print("  STEP 2: Splitting data")
+    print("=" * 60)
+    train, val, test = split_data(df, train_frac=0.75, val_frac=0.125, test_frac=0.125)
+
+    # --- Step 3 & 4: Initialize and train SVD with SGD ---
+    print("\n" + "=" * 60)
+    print("  STEP 3: Training SVD with SGD")
+    print("=" * 60)
+    n_users = len(user_to_id)
+    n_items = len(song_to_id)
+    print(f"  Matrix shape: {n_users} users x {n_items} items")
+    print(f"  Latent factors: 20")
+    print(f"  Learning rate: 0.005, Regularization: 0.02")
+    print()
+
+    model = SVD(
+        n_users=n_users,
+        n_items=n_items,
+        n_factors=20,
+        lr=0.005,
+        reg=0.02,
+    )
+
+    history = model.fit(train, val=val, n_epochs=20, verbose=True)
+
+    # --- Step 5: Final evaluation on test set ---
+    print("\n" + "=" * 60)
+    print("  STEP 4: Evaluating on held-out test set")
+    print("=" * 60)
+    test_metrics = evaluate_model(model, test, label="Test")
+    train_metrics = evaluate_model(model, train, label="Train")
+    val_metrics = evaluate_model(model, val, label="Validation")
+
+    print("\n\nSummary:")
+    print(f"  Train MSE:  {train_metrics['mse']:.6f}  |  RMSE: {train_metrics['rmse']:.6f}")
+    print(f"  Val MSE:    {val_metrics['mse']:.6f}  |  RMSE: {val_metrics['rmse']:.6f}")
+    print(f"  Test MSE:   {test_metrics['mse']:.6f}  |  RMSE: {test_metrics['rmse']:.6f}")
+
+
+if __name__ == "__main__":
+    main()
