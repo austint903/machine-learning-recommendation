@@ -86,3 +86,55 @@ def search_spotify_ids(sp, songs_df, checkpoint_path):
     return search_df
 
 
+#grab audio features for each song id 
+def fetch_audio_features_batch(sp, search_df):
+    """
+    Given search_df with columns [track_id, spotify_id], fetch audio features
+    in batches of BATCH_SIZE.
+
+    Returns DataFrame with track_id + 13 audio feature columns.
+    """
+    found = search_df[search_df["spotify_id"].notna()].copy()
+    print(f"  Songs with Spotify match: {len(found)} / {len(search_df)}")
+
+    all_features = []
+    spotify_ids = found["spotify_id"].tolist()
+    track_ids = found["track_id"].tolist()
+
+    for start in range(0, len(spotify_ids), BATCH_SIZE):
+        batch_spotify = spotify_ids[start:start + BATCH_SIZE]
+        batch_track = track_ids[start:start + BATCH_SIZE]
+
+        try:
+            features_list = sp.audio_features(batch_spotify)
+        except spotipy.exceptions.SpotifyException as e:
+            if e.http_status == 429:
+                retry_after = int(e.headers.get("Retry-After", 5))
+                print(f"  Rate limited. Sleeping {retry_after}s...")
+                time.sleep(retry_after)
+                features_list = sp.audio_features(batch_spotify)
+            elif e.http_status == 403:
+                print(f"  ERROR: 403 Forbidden on audio_features endpoint.")
+                print(f"  Spotify deprecated this endpoint for apps created after Nov 2024.")
+                print(f"  Aborting feature fetch.")
+                return pd.DataFrame(columns=["track_id"] + AUDIO_FEATURE_COLS)
+            else:
+                print(f"  Error on batch starting at {start}: {e}")
+                features_list = [None] * len(batch_spotify)
+
+        for tid, feat in zip(batch_track, features_list):
+            if feat is not None:
+                row = {"track_id": tid}
+                for col in AUDIO_FEATURE_COLS:
+                    row[col] = feat.get(col)
+                all_features.append(row)
+
+        processed = min(start + len(batch_spotify), len(spotify_ids))
+        if (start // BATCH_SIZE) % 20 == 0:
+            print(f"  Fetched features: {processed} / {len(spotify_ids)}")
+
+        time.sleep(0.1)
+
+    return pd.DataFrame(all_features)
+
+
