@@ -9,3 +9,9 @@ data/
 
 #.DS_Store
 /.DS_Store
+
+#pycache
+/model/__pycache__
+
+#cache
+/.cache

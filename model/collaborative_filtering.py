@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -110,6 +112,53 @@ class SVD:
         self.b_i = np.zeros(n_items)   # item biases
 
         self.global_mean = 0.0
+        self.song_to_id = {}  # set externally after construction
+
+    def save(self, path: str | Path):
+        """Save model parameters and ID mappings to a .npz file."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(
+            path,
+            P=self.P,
+            Q=self.Q,
+            b_u=self.b_u,
+            b_i=self.b_i,
+            global_mean=np.array([self.global_mean]),
+        )
+        # Save song_to_id mapping as JSON alongside the .npz
+        mapping_path = path.with_suffix(".json")
+        with open(mapping_path, "w") as f:
+            # Convert (artist, song) tuple keys to "artist|||song" strings
+            serializable = {f"{k[0]}|||{k[1]}": v for k, v in self.song_to_id.items()}
+            json.dump(serializable, f)
+        print(f"  Model saved to {path}")
+
+    @classmethod
+    def load(cls, path: str | Path) -> "SVD":
+        """Load a pre-trained SVD model from a .npz file."""
+        path = Path(path)
+        data = np.load(path)
+        P = data["P"]
+        Q = data["Q"]
+
+        model = cls(n_users=P.shape[0], n_items=Q.shape[0], n_factors=P.shape[1])
+        model.P = P
+        model.Q = Q
+        model.b_u = data["b_u"]
+        model.b_i = data["b_i"]
+        model.global_mean = float(data["global_mean"][0])
+
+        # Load song_to_id mapping
+        mapping_path = path.with_suffix(".json")
+        with open(mapping_path) as f:
+            raw = json.load(f)
+            model.song_to_id = {
+                tuple(k.split("|||", 1)): v for k, v in raw.items()
+            }
+
+        print(f"  Model loaded from {path}")
+        return model
 
     def predict_one(self, u: int, i: int) -> float:
         """Predict rating for a single (user, item) pair."""
@@ -275,6 +324,7 @@ def main():
         lr=0.005,
         reg=0.02,
     )
+    model.song_to_id = song_to_id
 
     history = model.fit(train, val=val, n_epochs=20, verbose=True)
 
@@ -290,6 +340,13 @@ def main():
     print(f"  Train MSE:  {train_metrics['mse']:.6f}  |  RMSE: {train_metrics['rmse']:.6f}")
     print(f"  Val MSE:    {val_metrics['mse']:.6f}  |  RMSE: {val_metrics['rmse']:.6f}")
     print(f"  Test MSE:   {test_metrics['mse']:.6f}  |  RMSE: {test_metrics['rmse']:.6f}")
+
+    # --- Step 5: Save model ---
+    print("\n" + "=" * 60)
+    print("  STEP 5: Saving trained model")
+    print("=" * 60)
+    save_path = project_root / "data" / "models" / "svd_model.npz"
+    model.save(save_path)
 
 
 if __name__ == "__main__":
