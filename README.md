@@ -53,15 +53,25 @@ Produces: `audio_features.csv`
 ### 3. Train collaborative filtering model (SVD)
 
 ```bash
-python src/collaborative_filtering.py
+python model/collaborative_filtering.py
 ```
 
-Trains SVD matrix factorization with stochastic gradient descent on user-song interactions. Splits data 75/12.5/12.5 train/val/test and prints mean squared error each epoch.
+Trains SVD matrix factorization with stochastic gradient descent on user-song interactions. Splits data 75/12.5/12.5 train/val/test and prints mean squared error each epoch. Saves the trained model to `data/models/svd_model.npz` for use by the hybrid recommender.
 
 ### 4. Run content-based filtering model (KNN)
 
 ```bash
-python src/content_based_filtering.py
+python model/content_based_filtering.py
 ```
 
 Loads audio features, fits KNN with cosine similarity, and generates 10 recommendations per user based on their listening history.
+
+### 5. Run the app (hybrid recommender)
+
+```bash
+python app/app.py
+```
+
+Launches a Gradio web UI at `http://127.0.0.1:7860` (can also be deployed publically). Search for songs on Spotify, select up to 5, and get recommendations using a two-stage hybrid pipeline:
+1. **KNN candidate generation** — finds ~100 sonically similar songs from the dataset
+2. **SVD ranking** — re-ranks candidates using collaborative filtering item biases (learned song popularity)
