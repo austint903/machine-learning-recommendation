@@ -40,13 +40,14 @@ These produce:
 - `user_song_interaction.csv`
 - `unique_song_interaction.csv`
 
-### 2. Fetch Spotify audio features
+### 2. Match audio features
 
 ```bash
-python scripts/fetch_spotify_features.py
+python scripts/match_audio_features.py
 ```
 
-Searches Spotify for each song and fetches 13 audio features (energy, tempo, danceability, etc.). Takes ~70 minutes. Checkpoints every 500 songs so it can resume if interrupted.
+Matches our Last.fm songs against a Kaggle dataset (`data/raw/song_audio_features.csv`) containing pre-collected Spotify audio features (energy, tempo, danceability, etc.). Matches by artist + track name.
+- As of Feb 2026, Spotify deprecated its song features endpoint
 
 Produces: `audio_features.csv`
 
@@ -75,3 +76,17 @@ python app/app.py
 Launches a Gradio web UI at `http://127.0.0.1:7860` (can also be deployed publically). Search for songs on Spotify, select up to 5, and get recommendations using a two-stage hybrid pipeline:
 1. **KNN candidate generation** — finds ~100 sonically similar songs from the dataset
 2. **SVD ranking** — re-ranks candidates using collaborative filtering item biases (learned song popularity)
+
+### 6. Run evaluation and generate plots
+
+```bash
+python model/evaluation.py
+```
+
+Evaluates all three models (SVD, KNN, Hybrid) using ranking metrics: Precision@k, Recall@k, and NDCG@k. Generates plots to `plots/`:
+- SVD training curves (train/val MSE per epoch)
+- Audio feature distributions and correlation heatmap
+- t-SNE embedding of the song feature space
+- Model comparison bar chart
+
+A Jupyter notebook with the same analysis is also available at `notebooks/evaluation.ipynb`.
