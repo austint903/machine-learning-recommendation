@@ -1,9 +1,6 @@
 import numpy as np
 import pandas as pd
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
 from pathlib import Path
-from dotenv import load_dotenv
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import NearestNeighbors
 
@@ -93,67 +90,18 @@ class ContentBasedModel:
 
         return profile.reshape(1, -1)
 
-    def build_profile_from_songs(
-        self,
-        songs: list[tuple[str, str]],
-    ) -> np.ndarray | None:
-        load_dotenv(Path(__file__).parent.parent / ".env")
-        sp = spotipy.Spotify(
-            auth_manager=SpotifyClientCredentials(),
-            requests_timeout=10,
-            retries=3,
-        )
-
-        feature_vectors = []
-
-        for artist, track in songs:
-            query = f"artist:{artist} track:{track}"
-            try:
-                result = sp.search(q=query, type="track", limit=1)
-                items = result["tracks"]["items"]
-                if not items:
-                    print(f"    Not found on Spotify: {artist} - {track}")
-                    continue
-
-                spotify_id = items[0]["id"]
-                features = sp.audio_features([spotify_id])
-
-                if features and features[0] is not None:
-                    vec = [features[0].get(col, 0) for col in AUDIO_FEATURE_COLS]
-                    feature_vectors.append(vec)
-                else:
-                    print(f"    No audio features: {artist} - {track}")
-            except Exception as e:
-                print(f"    Error fetching {artist} - {track}: {e}")
-
-        if len(feature_vectors) == 0:
-            return None
-
-        raw = np.array(feature_vectors)
-        normalized = self.scaler.transform(raw)
-        profile = np.mean(normalized, axis=0)
-
-        return profile.reshape(1, -1)
-
     def recommend(
         self,
-        user_track_ids: list[int] | None = None,
+        user_track_ids: list[int],
         play_counts: list[int] | None = None,
-        songs: list[tuple[str, str]] | None = None,
         n_recommendations: int = 10,
     ) -> pd.DataFrame | None:
 
-        if songs is not None:
-            profile = self.build_profile_from_songs(songs)
-        elif user_track_ids is not None:
-            profile = self.build_user_profile(user_track_ids, play_counts)
-        else:
-            return None
-
+        profile = self.build_user_profile(user_track_ids, play_counts)
         if profile is None:
             return None
 
-        exclude_ids = set(user_track_ids) if user_track_ids else set()
+        exclude_ids = set(user_track_ids)
 
         k = min(n_recommendations + len(exclude_ids) + 10, len(self.X_normalized))
         distances, indices = self.knn.kneighbors(profile, n_neighbors=k)
