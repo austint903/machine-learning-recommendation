@@ -1,14 +1,16 @@
 import sys
 from pathlib import Path
 
+import pandas as pd
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from dotenv import load_dotenv
 import gradio as gr
-from model.hybrid_recommender import HybridRecommender, AUDIO_FEATURE_COLS
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+
+from model.hybrid_recommender import HybridRecommender, AUDIO_FEATURE_COLS
 
 load_dotenv(project_root / ".env")
 sp = spotipy.Spotify(
@@ -45,37 +47,59 @@ def get_recommendations(sel1, sel2, sel3, sel4, sel5, num_recommendations):
             artist, track = entry.split(" - ", 1)
             songs.append((artist.strip(), track.strip()))
 
-    user_vectors = []
-    found_songs = []
+    if not songs:
+        return "Could not parse song selections."
 
-    for artist, track in songs:
-        query = f"artist:{artist} track:{track}"
-        try:
-            result = sp.search(q=query, type="track", limit=1)
-            items = result["tracks"]["items"]
-            if not items:
-                continue
-
-            spotify_id = items[0]["id"]
-            features = sp.audio_features([spotify_id])
-
-            if features and features[0] is not None:
-                vec = [features[0].get(col, 0) for col in AUDIO_FEATURE_COLS]
-                user_vectors.append(vec)
-                found_songs.append(f"{items[0]['artists'][0]['name']} - {items[0]['name']}")
-        except Exception:
-            continue
-
-    if len(user_vectors) == 0:
-        return "Could not fetch audio features for your songs."
-
+    # Load dataset
     features_path = project_root / "data" / "processed" / "audio_features.csv"
     songs_path = project_root / "data" / "processed" / "unique_song_interaction.csv"
     svd_model_path = project_root / "data" / "models" / "svd_model.npz"
 
     if not features_path.exists():
-        return "audio_features.csv not found. Run: python scripts/fetch_spotify_features.py"
+        return "audio_features.csv not found. Run: python scripts/match_audio_features.py"
 
+    # Load audio features and song metadata to look up user songs locally
+    features_df = pd.read_csv(features_path)
+    song_meta = pd.read_csv(songs_path)
+
+    # Build lookup: lowercase (artist, track) -> track_id
+    meta_to_track_id = {
+        (row["Artist"].lower().strip(), row["Track"].lower().strip()): row["track_id"]
+        for _, row in song_meta.iterrows()
+    }
+
+    # Build track_id -> feature row index in features_df
+    track_id_to_feat_idx = {
+        int(row["track_id"]): idx
+        for idx, row in features_df.iterrows()
+    }
+
+    # Look up each user-selected song in our local dataset
+    user_vectors = []
+    found_songs = []
+    not_found = []
+
+    for artist, track in songs:
+        key = (artist.lower().strip(), track.lower().strip())
+        tid = meta_to_track_id.get(key)
+
+        if tid is not None and tid in track_id_to_feat_idx:
+            feat_idx = track_id_to_feat_idx[tid]
+            vec = features_df[AUDIO_FEATURE_COLS].iloc[feat_idx].values.tolist()
+            user_vectors.append(vec)
+            found_songs.append(f"{artist} - {track}")
+        else:
+            not_found.append(f"{artist} - {track}")
+
+    if len(user_vectors) == 0:
+        msg = "None of your selected songs were found in our dataset.\n"
+        msg += "Songs not found:\n"
+        for s in not_found:
+            msg += f"  - {s}\n"
+        msg += "\nTry selecting songs that are in the Last.fm dataset."
+        return msg
+
+    # Run hybrid recommender
     recommender = HybridRecommender(
         features_path=features_path,
         songs_path=songs_path,
@@ -90,6 +114,9 @@ def get_recommendations(sel1, sel2, sel3, sel4, sel5, num_recommendations):
     )
 
     lines = [f"Based on: {', '.join(found_songs)}"]
+
+    if not_found:
+        lines.append(f"(Not in dataset: {', '.join(not_found)})")
 
     if recommender.svd is not None:
         lines.append("Mode: Hybrid (KNN candidates → SVD ranking)\n")
@@ -155,12 +182,14 @@ with gr.Blocks(title="Music Recommendation System") as demo:
                 placeholder="Search for songs, select them, and click 'Get Recommendations'..."
             )
 
+    # Wire up search → dropdown for each song slot
     search1.submit(fn=search_spotify, inputs=search1, outputs=select1)
     search2.submit(fn=search_spotify, inputs=search2, outputs=select2)
     search3.submit(fn=search_spotify, inputs=search3, outputs=select3)
     search4.submit(fn=search_spotify, inputs=search4, outputs=select4)
     search5.submit(fn=search_spotify, inputs=search5, outputs=select5)
 
+    # Wire up recommend button
     submit_btn.click(
         fn=get_recommendations,
         inputs=[select1, select2, select3, select4, select5, num_recs],
